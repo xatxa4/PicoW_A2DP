@@ -88,7 +88,7 @@ static audio_buffer_pool_t *init_audio(uint32_t sample_frequency, uint8_t channe
     btstack_audio_pico_producer_format.format = &btstack_audio_pico_audio_format;
     btstack_audio_pico_producer_format.sample_stride = 2 * 2;
 
-    audio_buffer_pool_t * producer_pool = audio_new_producer_pool(&btstack_audio_pico_producer_format, 3, SAMPLES_PER_BUFFER); // todo correct size
+    audio_buffer_pool_t * producer_pool = audio_new_producer_pool(&btstack_audio_pico_producer_format, 2, SAMPLES_PER_BUFFER); // todo correct size
 
     audio_i2s_config_t config;
     config.data_pin       = PICO_AUDIO_I2S_DATA_PIN;

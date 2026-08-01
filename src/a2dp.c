@@ -14,9 +14,9 @@
 const btstack_audio_sink_t * btstack_audio_pico_sink_get_instance(void);
 
 
-#define OPTIMAL_FRAMES_MIN 60
-#define OPTIMAL_FRAMES_MAX 120
-#define ADDITIONAL_FRAMES  30
+#define OPTIMAL_FRAMES_MIN 20
+#define OPTIMAL_FRAMES_MAX 40
+#define ADDITIONAL_FRAMES  10
 #define NUM_CHANNELS       2
 #define BYTES_PER_FRAME    (2*NUM_CHANNELS)
 #define MAX_SBC_FRAME_SIZE 120
