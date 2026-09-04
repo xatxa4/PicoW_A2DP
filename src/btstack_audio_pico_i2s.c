@@ -75,30 +75,38 @@ static audio_buffer_format_t btstack_audio_pico_producer_format;
 static audio_buffer_pool_t * btstack_audio_pico_audio_buffer_pool;
 static uint8_t               btstack_audio_pico_channel_count;
 
+#ifndef S16_TO_S32_SHIFT
+#define S16_TO_S32_SHIFT 16
+#endif
+
 static audio_buffer_pool_t *init_audio(uint32_t sample_frequency, uint8_t channel_count) {
 
     // num channels requested by application
     btstack_audio_pico_channel_count = channel_count;
 
-    // always use stereo
-    btstack_audio_pico_audio_format.format = AUDIO_BUFFER_FORMAT_PCM_S16;
+    // request S32 stereo output
+    btstack_audio_pico_audio_format.pcm_format = AUDIO_PCM_FORMAT_S32;
     btstack_audio_pico_audio_format.sample_freq = sample_frequency;
-    btstack_audio_pico_audio_format.channel_count = 2;
+    btstack_audio_pico_audio_format.channel_count = AUDIO_CHANNEL_STEREO;
 
     btstack_audio_pico_producer_format.format = &btstack_audio_pico_audio_format;
-    btstack_audio_pico_producer_format.sample_stride = 2 * 2;
+    btstack_audio_pico_producer_format.sample_stride = 4 * btstack_audio_pico_audio_format.channel_count; // 8 bytes per frame
 
     audio_buffer_pool_t * producer_pool = audio_new_producer_pool(&btstack_audio_pico_producer_format, 2, SAMPLES_PER_BUFFER); // todo correct size
 
     audio_i2s_config_t config;
     config.data_pin       = PICO_AUDIO_I2S_DATA_PIN;
     config.clock_pin_base = PICO_AUDIO_I2S_CLOCK_PIN_BASE;  // BCK, LRCK = BCK+1
-    config.dma_channel    = (int8_t) dma_claim_unused_channel(true);
+    // select two free dma channels and unclaim them so audio_i2s_setup can claim
+    int dma_ch0 = dma_claim_unused_channel(true);
+    int dma_ch1 = dma_claim_unused_channel(true);
+    dma_channel_unclaim(dma_ch0);
+    dma_channel_unclaim(dma_ch1);
+    config.dma_channel0 = (uint8_t)dma_ch0;
+    config.dma_channel1 = (uint8_t)dma_ch1;
     config.pio_sm         = 0;
 
-    // audio_i2s_setup claims the channel again https://github.com/raspberrypi/pico-extras/issues/48
-    dma_channel_unclaim(config.dma_channel);
-    const audio_format_t * output_format = audio_i2s_setup(&btstack_audio_pico_audio_format, &config);
+    const audio_format_t * output_format = audio_i2s_setup(&btstack_audio_pico_audio_format, &btstack_audio_pico_audio_format, &config);
     if (!output_format) {
         panic("PicoAudio: Unable to open audio device.\n");
     }
@@ -117,19 +125,29 @@ static void btstack_audio_pico_sink_fill_buffers(void){
             break;
         }
 
-        int16_t * buffer16 = (int16_t *) audio_buffer->buffer->bytes;
-        (*playback_callback)(buffer16, audio_buffer->max_sample_count);
+        int frames = audio_buffer->max_sample_count; // frames per channel
 
-        // duplicate samples for mono
+        static int16_t tmp16[SAMPLES_PER_BUFFER * 2]; // stereo temp buffer
+
+        // render 16-bit PCM from existing pipeline into tmp16 (interleaved L,R,L,R...)
+        (*playback_callback)(tmp16, frames);
+
+        // if client requested mono input, duplicate into interleaved stereo before conversion
         if (btstack_audio_pico_channel_count == 1){
-            int16_t i;
-            for (i = SAMPLES_PER_BUFFER - 1 ; i >= 0; i--){
-                buffer16[2*i  ] = buffer16[i];
-                buffer16[2*i+1] = buffer16[i];
+            for (int i = frames - 1; i >= 0; --i){
+                tmp16[2*i  ] = tmp16[i];
+                tmp16[2*i+1] = tmp16[i];
             }
         }
 
-        audio_buffer->sample_count = audio_buffer->max_sample_count;
+        int total_samples = frames * 2; // stereo
+
+        int32_t * dst32 = (int32_t *) audio_buffer->buffer->bytes;
+        for (int i = 0; i < total_samples; ++i){
+            dst32[i] = ((int32_t) tmp16[i]) << S16_TO_S32_SHIFT;
+        }
+
+        audio_buffer->sample_count = frames; // frames per channel
         give_audio_buffer(btstack_audio_pico_audio_buffer_pool, audio_buffer);
     }
 }
