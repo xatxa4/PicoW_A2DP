@@ -23,6 +23,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_executable(${PROJECT_NAME})
 
+# core sources
 target_sources(${PROJECT_NAME} PRIVATE
     ${PICO_SDK_PATH}/lib/btstack/src/btstack_audio.c
     src/btstack_audio_pico_i2s.c
@@ -31,6 +32,11 @@ target_sources(${PROJECT_NAME} PRIVATE
     src/sdp.c
     src/a2dp.c
     src/avrcp.c
+)
+
+# vendored 32-bit I2S implementation
+target_sources(${PROJECT_NAME} PRIVATE
+    vendor/pico_audio_i2s_32b/src/audio_i2s.c
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
@@ -46,14 +52,16 @@ target_link_libraries(${PROJECT_NAME}
     pico_stdlib
     pico_stdio_usb  # use usb, not uart for stdio
     # pico_stdio_uart  # use uart, not usb for stdio e.g. via picoprobe
-    pico_audio_i2s
     pico_btstack_sbc_decoder
     pico_btstack_classic
     pico_btstack_cyw43
     pico_cyw43_arch_none
 )
 
+# include vendored headers first so S32-capable audio.h is picked up
 target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/vendor/pico_audio_i2s_32b/src/pico_audio_32b/include
+    ${CMAKE_CURRENT_LIST_DIR}/vendor/pico_audio_i2s_32b/src/include
     ${CMAKE_CURRENT_LIST_DIR} # For btstack config
 )
 
